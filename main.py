@@ -21,6 +21,7 @@ jsonOnlyAcceptJson = '{ "Error":"This method only accepts JSON"}'
 jsonTypeNotSupported = '{ "Error": "This type is not supported, must be JSON or HTML"}'
 jsonInvalidRequest= '{ "Error": "IDs are immutable"}'
 jsonCannotDelAll = '{ "Error": "Cannot delete or edit the list of all boats"}'
+jsonNameNotUnique = '{ "Error": "Name must be unique"}'
 
 #assigns the self variable
 def create_self(item):
@@ -41,6 +42,13 @@ def check_ID_existence(results, id):
             return True #id is in
     return False
 
+#takes in list of results and returns a bool if key exists or not.
+def check_name_existence(results, nameStr):
+    for object in results:
+        if object['name'] == nameStr:
+            return True #id is in
+    return False
+
 @app.route('/boats', methods=['POST','GET', 'PUT', 'DELETE'])
 def boats_get_or_post():
     if request.method == 'POST':
@@ -49,13 +57,19 @@ def boats_get_or_post():
             return(jsonOnlyAcceptJson, 415)
         if "name" not in content or "type" not in content or "length" not in content:
             return (jsonErrorStringArgs, 400)
-        new_boat = datastore.entity.Entity(key=client.key(constants.boats))
-        new_boat.update({"name": content["name"], "type": content["type"],
-          "length": content["length"]})
-        client.put(new_boat)
-        new_boat["id"] = new_boat.id
-        create_self(new_boat)
-        return (new_boat, 201)
+        query = client.query(kind=constants.boats) #load the boats
+        results = list(query.fetch()) #store boats into a list
+        if (check_name_existence(results, content['name']) == False): #if the name is not unque, return 403
+            new_boat = datastore.entity.Entity(key=client.key(constants.boats))
+            new_boat.update({"name": content["name"], "type": content["type"],
+            "length": content["length"]})
+            client.put(new_boat)
+            new_boat["id"] = new_boat.id
+            create_self(new_boat)
+            return (new_boat, 201)
+        else:
+            return (jsonNameNotUnique, 403)
+
     
     elif request.method == 'GET':
         query = client.query(kind=constants.boats)
@@ -104,14 +118,17 @@ def boats_get_delete_patch(id):
         results = list(query.fetch()) #load boats into list object
         if check_ID_existence(results, id) == False:
             return(jsonErrorStringBoatID, 404)
-        boat_key = client.key(constants.boats, int(id))
-        boat = client.get(key=boat_key) #load the boat
-        boat.update({"name": content["name"], "type": content["type"],
-          "length": content["length"]})
-        client.put(boat)
-        boat['id'] = int(id)
-        create_self_second(boat)
-        return (boat, 303)
+        if (check_name_existence(results, content['name']) == False): #if the name is not unque, return 403
+            boat_key = client.key(constants.boats, int(id))
+            boat = client.get(key=boat_key) #load the boat
+            boat.update({"name": content["name"], "type": content["type"],
+            "length": content["length"]})
+            client.put(boat)
+            boat['id'] = int(id)
+            create_self_second(boat)
+            return (boat, 303)
+        else:
+            return (jsonNameNotUnique, 403)
     
     elif request.method == 'PATCH':
         content = request.get_json()
@@ -128,7 +145,10 @@ def boats_get_delete_patch(id):
         boat_key = client.key(constants.boats, int(id))
         boat = client.get(key=boat_key) #load the boat
         if "name" in content:
-            boat.update({"name": content["name"]})
+            if (check_name_existence(results, content['name']) == False): #if the name is not unque, return 403
+                boat.update({"name": content["name"]})
+            else:
+                return (jsonNameNotUnique, 403)
         if "length" in content:
             boat.update({"length": content["length"]})
         if "type" in content:
