@@ -22,7 +22,13 @@ jsonTypeNotSupported = '{ "Error": "This type is not supported, must be JSON or 
 jsonInvalidRequest= '{ "Error": "IDs are immutable"}'
 jsonCannotDelAll = '{ "Error": "Cannot delete or edit the list of all boats"}'
 jsonNameNotUnique = '{ "Error": "Name must be unique"}'
-
+jsonErrorInvalidInputName = '{ "Error": "Name cannot be longer than 16 characters. It can also only contain letters of the alphabet"}'
+jsonErrorInvalidInputType = '{ "Error": "Type cannot be longer than 16 characters. It can also only contain letters of the alphabet"}'
+jsonErrorInvalidInputLength = '{ "Error": "Length cannot be longer than 7 digits. It can also only contain numbers"}'
+jsonErrorTooManyAttribs = '{ "Error": "Boats only have 3 attributes Name, Length and Type"}'
+jsonErrorMustBeInt =  '{ "Error": "Length must be an integer"}'
+jsonErrorMustBeStrType =  '{ "Error": "Type must be a string"}'
+jsonErrorMustBeStrName =  '{ "Error": "Name must be a string"}'
 #assigns the self variable
 def create_self(item):
     selfURL = request.base_url + '/' + str(item.id)
@@ -49,6 +55,53 @@ def check_name_existence(results, nameStr):
             return True #id is in
     return False
 
+def validate_input(input, value):
+    if input == "name":
+        if len(value) > 16:
+            return False
+        for eachChar in value:
+            if ((eachChar >= 'a' and eachChar <= 'z') or (eachChar >= 'A' and eachChar <= 'Z')):
+                continue
+            if (eachChar == ' '):
+                continue
+            else:
+                return False
+        return True
+    elif input == "type":
+        if len(value) > 16:
+            return False
+        for eachChar in value:
+            if ((eachChar >= 'a' and eachChar <= 'z') or (eachChar >= 'A' and eachChar <= 'Z')):
+                continue
+            if (eachChar == ' '):
+                continue
+            else:
+                return False
+        return True
+    elif input == "length":
+        iterable = str(value)
+        if len(str(value)) > 7:
+            return False
+        for eachChar in iterable:
+            try:
+                if (int(eachChar) > 9 or int(eachChar) < 0):
+                    return False
+            except:
+                return False
+        return True
+    else:
+        return 'Invalid attribute supplied'
+
+def count_valid_attribs(content):
+    count = 0
+    if "name" in content:
+        count += 1
+    if "length" in content:
+        count += 1
+    if "type" in content:
+        count += 1
+    return count
+
 @app.route('/boats', methods=['POST','GET', 'PUT', 'DELETE'])
 def boats_get_or_post():
     if request.method == 'POST':
@@ -57,10 +110,29 @@ def boats_get_or_post():
             return(jsonOnlyAcceptJson, 415)
         if "name" not in content or "type" not in content or "length" not in content:
             return (jsonErrorStringArgs, 400)
+        if len(content) > 3:
+            return (jsonErrorTooManyAttribs, 400)
         query = client.query(kind=constants.boats) #load the boats
         results = list(query.fetch()) #store boats into a list
         if (check_name_existence(results, content['name']) == False): #if the name is not unque, return 403
             new_boat = datastore.entity.Entity(key=client.key(constants.boats))
+            if type(content['name']) != str:
+                return (jsonErrorMustBeStrName, 400)
+            if (validate_input('name', content['name']) == True):
+                pass
+            else:
+                return (jsonErrorInvalidInputName, 400)
+            if type(content['type']) != str:
+                return (jsonErrorMustBeStrType, 400)
+            if (validate_input('type', content['type']) == True):
+                pass
+            else:
+                return (jsonErrorInvalidInputType, 400)
+            if (validate_input('length', content['length']) == True):
+                if type(content['length']) != int:
+                    return (jsonErrorMustBeInt, 400)
+            else:
+                return (jsonErrorInvalidInputLength, 400)
             new_boat.update({"name": content["name"], "type": content["type"],
             "length": content["length"]})
             client.put(new_boat)
@@ -118,7 +190,26 @@ def boats_get_delete_patch(id):
         results = list(query.fetch()) #load boats into list object
         if check_ID_existence(results, id) == False:
             return(jsonErrorStringBoatID, 404)
+        if type(content['name']) != str:
+            return (jsonErrorMustBeStrName, 400)
+        if type(content['type']) != str:
+            return (jsonErrorMustBeStrType, 400)
         if (check_name_existence(results, content['name']) == False): #if the name is not unque, return 403
+            if (validate_input('name', content['name']) == True):
+                pass
+            else:
+                return (jsonErrorInvalidInputName, 400)
+            if (validate_input('type', content['type']) == True):
+                pass
+            else:
+                return (jsonErrorInvalidInputType, 400)
+            if (validate_input('length', content['length']) == True):
+                if type(content['length']) != int:
+                    return (jsonErrorMustBeInt, 400)
+            else:
+                return (jsonErrorInvalidInputLength, 400)
+            if (count_valid_attribs(content) < len(content)):
+                return(jsonErrorTooManyAttribs, 400)
             boat_key = client.key(constants.boats, int(id))
             boat = client.get(key=boat_key) #load the boat
             boat.update({"name": content["name"], "type": content["type"],
@@ -144,15 +235,33 @@ def boats_get_delete_patch(id):
             return(jsonErrorStringBoatID, 404)
         boat_key = client.key(constants.boats, int(id))
         boat = client.get(key=boat_key) #load the boat
+        count = count_valid_attribs(content)
         if "name" in content:
-            if (check_name_existence(results, content['name']) == False): #if the name is not unque, return 403
-                boat.update({"name": content["name"]})
+            if type(content['name']) != str:
+                return (jsonErrorMustBeStrName, 400)
+            if (validate_input('name', content['name']) == True): #make sure name is not longer than 16 chars
+                if (check_name_existence(results, content['name']) == False): #if the name is not unique, return 403
+                    boat.update({"name": content["name"]})
+                else:
+                    return (jsonNameNotUnique, 403)
             else:
-                return (jsonNameNotUnique, 403)
+                return (jsonErrorInvalidInputName, 400)
         if "length" in content:
-            boat.update({"length": content["length"]})
+            if type(content['length']) != int:
+                return (jsonErrorMustBeInt, 400)
+            if (validate_input('length', content['length']) == True):
+                boat.update({"length": content["length"]})
+            else:
+                return (jsonErrorInvalidInputLength, 400)
         if "type" in content:
-            boat.update({"type": content["type"]})
+            if type(content['type']) != str:
+                return (jsonErrorMustBeStrType, 400)
+            if (validate_input('type', content['type']) == True):
+                boat.update({"type": content["type"]})
+            else:
+                return (jsonErrorInvalidInputType, 400)
+        if count < len(content):
+            return (jsonErrorTooManyAttribs, 400)
         client.put(boat)
         boat['id'] = int(id)
         create_self_second(boat)
