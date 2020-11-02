@@ -13,7 +13,7 @@ app.wsgi_app = DebuggedApplication(app.wsgi_app, True)
 
 @app.route('/')
 def index():
-    return "Please navigate to /boats"
+    return "Please navigate to /boats to use this API"
 
 jsonErrorStringBoatID = '{ "Error":"No boat with this boat_id exists"}'
 jsonErrorStringArgs = '{ "Error":"The request object is missing at least one of the required attributes"}'
